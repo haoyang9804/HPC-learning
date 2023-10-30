@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <chrono>
 #include <random>
+#include "benchmarking.hpp"
 
 std::random_device rd;
 
@@ -73,6 +74,7 @@ struct matrix {
 // trivial one, no optimization
 matrix trivial(matrix& image, matrix& kernel) {
   assert(kernel <= image);
+  MARK_FUNCTION
   matrix res(image.h-kernel.h+1, image.w-kernel.w+1, true);
   for (int i = 0; i + kernel.h <= image.h; i++) {
     for (int j = 0; j + kernel.w <= image.w; j++) {
@@ -92,6 +94,7 @@ matrix trivial(matrix& image, matrix& kernel) {
 // memoization with a matrix
 matrix memoize(matrix& image, matrix& kernel) {
   assert(kernel <= image);
+  MARK_FUNCTION
   matrix res_1(image.h, image.w-kernel.w+1, true);
   matrix res_2(image.h-kernel.h+1, image.w-kernel.w+1, true);
   double sum = 0;
@@ -131,8 +134,9 @@ matrix memoize(matrix& image, matrix& kernel) {
 // trivial, but parallel
 matrix trivial_parallel(matrix& image, matrix& kernel) {
   assert(kernel <= image);
+  MARK_FUNCTION
   matrix res(image.h-kernel.h+1, image.w-kernel.w+1, true);
-  #pragma omp parallel for
+  #pragma omp parallel for num_threads(16)
   for (int i = 0; i <= image.h - kernel.h; i++) {
     for (int j = 0; j + kernel.w <= image.w; j++) {
       double avg = 0;
@@ -151,9 +155,10 @@ matrix trivial_parallel(matrix& image, matrix& kernel) {
 // memorize, and parallel
 matrix memorize_parallel(matrix& image, matrix& kernel) {
   assert(kernel <= image);
+  MARK_FUNCTION
   matrix res_1(image.h, image.w-kernel.w+1, true);
   matrix res_2(image.h-kernel.h+1, image.w-kernel.w+1, true);
-  #pragma omp parallel for
+  #pragma omp parallel for num_threads(16)
   for (int i = 0; i < image.h; i++) {
     double sum;
     for (int j = 0; j + kernel.w <= image.w; j++) {
@@ -169,7 +174,7 @@ matrix memorize_parallel(matrix& image, matrix& kernel) {
       res_1.set(i, j, sum);
     }
   }
-  #pragma omp parallel for
+  #pragma omp parallel for num_threads(16)
   for (int j = 0; j < res_1.w; j++) {
     double sum;
     for (int i = 0; i + kernel.h <= res_1.h; i++) {
@@ -189,37 +194,21 @@ matrix memorize_parallel(matrix& image, matrix& kernel) {
 }
 
 
+// // tiling
+// matrix tile(matrix& image, matrix& kernel) {
+
+// }
 
 int main() {
 
   matrix image(1000, 1000, true);
   image.random_init();
-  matrix kernel(10, 10);
+  matrix kernel(5, 5);
 
-  auto startTime = std::chrono::high_resolution_clock::now();
-  matrix res1 = trivial(image, kernel);
-  auto endTime = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
-  std::cout << "Time taken by trivial: " << duration << " microseconds." << std::endl;
-
-  startTime = std::chrono::high_resolution_clock::now();
-  matrix res2 = memoize(image, kernel);
-  endTime = std::chrono::high_resolution_clock::now();
-  duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
-  std::cout << "Time taken by memoize: " << duration << " microseconds." << std::endl;
-
-  startTime = std::chrono::high_resolution_clock::now();
-  matrix res3 = trivial_parallel(image, kernel);
-  endTime = std::chrono::high_resolution_clock::now();
-  duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
-  std::cout << "Time taken by trivial_parallel: " << duration << " microseconds." << std::endl;
-
-  startTime = std::chrono::high_resolution_clock::now();
-  matrix res4 = memorize_parallel(image, kernel);
-  endTime = std::chrono::high_resolution_clock::now();
-  duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
-  std::cout << "Time taken by memorize_parallel: " << duration << " microseconds." << std::endl;
-
+  matrix res1 = TIMING(trivial, image, kernel);
+  matrix res2 = TIMING(memoize, image, kernel);
+  matrix res3 = TIMING(trivial_parallel, image, kernel);
+  matrix res4 = TIMING(memorize_parallel, image, kernel);
 
   // check
   assert(res1 == res2);
